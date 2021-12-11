@@ -5,5 +5,5 @@ if
 then
 	 wget -P ~/vimwiki/wgetpdf/ $(xclip -o) && zathura $(ls -tu ~/vimwiki/wgetpdf/* | head -n 1)
 else
-	 zathura $(shuf -n1 -e ~/vimwiki/Wikipedia/*)
+	 tabbed -c zathura $(shuf -n5 -e ~/vimwiki/Wikipedia/*.pdf) -e
 fi

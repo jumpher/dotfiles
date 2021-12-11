@@ -1,8 +1,11 @@
 #!/bin/sh
 
-# dependencies: sed curl mpv
+# dependencies: grep sed curl video_player
+# video_player ( needs to be able to play urls )
+player_fn="mpv"
 
 prog="ani-cli"
+logfile="${XDG_CACHE_HOME:-$HOME/.cache}/ani-hsts"
 
 c_red="\033[1;31m"
 c_green="\033[1;32m"
@@ -18,8 +21,10 @@ help_text () {
 		printf "%s\n" "$line"
 	done <<-EOF
 	USAGE: $prog <query>
-	 -h     show this help text
-	 -d     download episode
+	 -h	 show this help text
+	 -d	 download episode
+	 -H	 continue where you left off
+	 -q	 set video quality (best/worst/360/480/720/..)
 	EOF
 }
 
@@ -29,16 +34,19 @@ die () {
 	exit 1
 }
 
+err () {
+	printf "$c_red%s$c_reset\n" "$*" >&2
+}
+
 search_anime () {
 	# get anime name along with its id
-	search=$1
+	search=$(printf '%s' "$1" | tr ' ' '-' )
 	titlepattern='<a href="/category/'
 
-	curl -s "https://gogoanime.vc//search.html" \
+	curl -s "https://gogoanime.pe//search.html" \
 		-G \
 		-d "keyword=$search" |
 	sed -n -E '
-        #<a href="/category/one-punch-man" title="One Punch Man">
 		s_^[[:space:]]*<a href="/category/([^"]*)" title="([^"]*)".*_\1_p
 		'
 }
@@ -47,7 +55,7 @@ search_eps () {
 	# get available episodes for anime_id
 	anime_id=$1
 
-	curl -s "https://gogoanime.vc/category/$anime_id" |
+	curl -s "https://gogoanime.pe/category/$anime_id" |
 	sed -n -E '
 		/^[[:space:]]*<a href="#" class="active" ep_start/{
 		s/.* '\''([0-9]*)'\'' ep_end = '\''([0-9]*)'\''.*/\2/p
@@ -56,26 +64,63 @@ search_eps () {
 		'
 }
 
-get_links () {
+get_embedded_video_link() {
 	# get the download page url
 	anime_id=$1
 	ep_no=$2
 
-	dpage_url=$(
-	curl -s "https://gogoanime.vc/$anime_id-episode-$ep_no" |
+	# credits to fork: https://github.com/Dink4n/ani-cli for the fix
+	curl -s "https://gogoanime.pe/$anime_id-episode-$ep_no" |
 	sed -n -E '
-		/^[[:space:]]*<li class="dowloads">/{
-		s/.*href="([^"]*)".*/\1/p
+		/^[[:space:]]*<a href="#" rel="100"/{
+		s/.*data-video="([^"]*)".*/https:\1/p
 		q
-		}')
+		}'
+}
 
-	curl -s "$dpage_url" |
+get_video_quality() {
+	embedded_video_url=$1
+	video_url=$2
+
+	video_file=$(curl -s --referer "$embedded_video_url" "$video_url")
+	available_qualities=$(printf '%s' "$video_file" | sed -n -E 's/.*NAME="([^p]*)p"/\1/p')
+	case $quality in
+		best)
+			printf '%s' "$available_qualities" | tail -n 1
+			;;
+
+		worst)
+			printf '%s' "$available_qualities" | head -n 1
+			;;
+
+		*)
+			is_quality_avail=$(printf '%s' "$available_qualities" | grep "$quality")
+			video_quality="$quality"
+			if [ -z "$is_quality_avail" ]; then
+				printf "$c_red%s$c_reset\n" "Current video quality is not available (defaulting to highest quality)" >&2
+				quality=best
+				video_quality=$(printf '%s' "$available_qualities" | tail -n 1)
+			fi
+			printf '%s' "$video_quality"
+			;;
+	esac
+
+}
+
+get_links () {
+	embedded_video_url="$1"
+	video_url=$(curl -s "$embedded_video_url" |
 	sed -n -E '
-		/^[[:space:]]*href="([^"]*\.mp4)".*/{
-		s/^[[:space:]]*href="([^"]*\.mp4)".*/\1/p
+		/^[[:space:]]*sources:/{
+		s/.*(https[^'\'']*).*/\1/p
 		q
 		}
-		'
+		')
+
+	video_quality=$(get_video_quality "$embedded_video_url" "$video_url")
+
+	# Replace the video with highest quality video
+	printf '%s' "$video_url" | sed -n -E "s/(.*)\.m3u8/\1.$video_quality.m3u8/p"
 }
 
 dep_ch () {
@@ -86,99 +131,100 @@ dep_ch () {
 	done
 }
 
-dep_ch "mpv" "curl" "sed"
+# get query
+get_search_query () {
+	if [ -z "$*" ]; then
+		printf "Search Anime: "
+		read -r query
+	else
+		query=$*
+	fi
+}
+
+# create history file
+[ -f "$logfile" ] || : > "$logfile"
 
 #####################
 ## Anime selection ##
 #####################
 
-is_download=0
+anime_selection () {
+	search_results=$*
+	menu_format_string='[%d] %s\n'
+	menu_format_string_c1="$c_blue[$c_cyan%d$c_blue] $c_reset%s\n"
+	menu_format_string_c2="$c_blue[$c_cyan%d$c_blue] $c_yellow%s$c_reset\n"
 
-while getopts 'hd' OPT; do
-	case $OPT in
-		h)
-			help_text
-			exit 0
-			;;
-		d)
-			is_download=1
-			;;
-	esac
-done
+	count=1
+	while read anime_id; do
+		# alternating colors for menu
+		[ $((count % 2)) -eq 0 ] &&
+			menu_format_string=$menu_format_string_c1 ||
+			menu_format_string=$menu_format_string_c2
 
-shift $((OPTIND - 1))
+		printf "$menu_format_string" "$count" "$anime_id"
+		count=$((count+1))
+	done <<-EOF
+	$search_results
+	EOF
 
-[ -z "$*" ] && { help_text ; die "Search query not provided";  }
+	# User input
+	printf "$c_blue%s$c_green" "Enter number: "
+	read choice
+	printf "$c_reset"
 
-query="$*"
-search_results=$(search_anime "$query")
+	# Check if input is a number
+	[ "$choice" -eq "$choice" ] 2>/dev/null || die "Invalid number entered"
 
-[ -z "$search_results" ] && die "No search results found"
+	# Select respective anime_id
+	count=1
+	while read anime_id; do
+		if [ $count -eq $choice ]; then
+			selection_id=$anime_id
+			break
+		fi
+		count=$((count+1))
+	done <<-EOF
+	$search_results
+	EOF
 
-# Creating menu
+	[ -z "$selection_id" ] && die "Invalid number entered"
 
-menu_format_string='[%d] %s\n'
-menu_format_string_c1="$c_blue[$c_cyan%d$c_blue] $c_reset%s\n"
-menu_format_string_c2="$c_blue[$c_cyan%d$c_blue] $c_yellow%s$c_reset\n"
-
-count=1
-while read anime_id; do
-	# alternating colors for menu
-	[ $((count % 2)) -eq 0 ] &&
-		menu_format_string=$menu_format_string_c1 ||
-		menu_format_string=$menu_format_string_c2
-
-	printf "$menu_format_string" "$count" "$anime_id"
-	count=$((count+1))
-done <<EOF
-$search_results
-EOF
-
-# User input
-printf "$c_blue%s$c_green" "Enter number: "
-read choice
-printf "$c_reset"
-
-# Check if input is a number
-[ "$choice" -eq "$choice" ] 2>/dev/null || die "Invalid number entered"
-
-# Select respective anime_id
-count=1
-while read anime_id; do
-	if [ $count -eq $choice ]; then
-		selection_id=$anime_id
-		break
-	fi
-	count=$((count+1))
-done <<EOF
-$search_results
-EOF
-
-[ -z "$selection_id" ] && die "Invalid number entered"
+	read last_ep_number <<-EOF
+	$(search_eps "$selection_id")
+	EOF
+}
 
 ##################
 ## Ep selection ##
 ##################
-read last_ep_number <<EOF
-$(search_eps "$selection_id")
-EOF
 
-printf "${c_blue}Choose episode $c_cyan[1-%d]$c_reset:$c_green " $last_ep_number
-read ep_choice
-printf "$c_reset"
+episode_selection () {
+	[ $is_download -eq 1 ] &&
+		printf "Range of episodes can be specified: start_number end_number\n"
 
-[ "$choice" -eq "$choice" ] 2>/dev/null || die "Invalid number entered"
+	printf "${c_blue}Choose episode $c_cyan[1-%d]$c_reset:$c_green " $last_ep_number
+	read ep_choice_start ep_choice_end
+	printf "$c_reset"
 
+}
 
-while :; do
+open_episode () {
+	anime_id=$1
+	episode=$2
 
-	if [ $ep_choice -lt 1 ] || [ $ep_choice -gt $last_ep_number ]; then
-		die "Episode out of range"
+	# Cool way of clearing screen
+	tput reset
+	if [ $episode -lt 1 ] || [ $episode -gt $last_ep_number ]; then
+		err "Episode out of range"
+		printf "${c_blue}Choose episode $c_cyan[1-%d]$c_reset:$c_green " $last_ep_number
+		read episode
+		printf "$c_reset"
 	fi
 
-	printf "Getting data for episode %d\n" $ep_choice
+	printf "Getting data for episode %d\n" $episode
 
-	video_url=$(get_links "$selection_id" "$ep_choice")
+	embedded_video_url=$(get_embedded_video_link "$anime_id" "$episode")
+	video_url=$(get_links "$embedded_video_url")
 
 	case $video_url in
 		*streamtape*)
@@ -194,35 +240,134 @@ while :; do
 	esac
 
 	if [ $is_download -eq 0 ]; then
-		setsid -f mpv "$video_url" >/dev/null 2>&1
+		# write anime and episode number
+		sed -E "
+			s/^${selection_id}\t[0-9]+/${selection_id}\t$((episode+1))/
+		" "$logfile" > "${logfile}.new" && mv "${logfile}.new" "$logfile"
+
+		setsid -f $player_fn --http-header-fields="Referer: $embedded_video_url" "$video_url" >/dev/null 2>&1
 	else
-		printf "Downloading episode $ep_choice ...\n"
+		printf "Downloading episode $episode ...\n"
 		printf "%s\n" "$video_url"
+		# add 0 padding to the episode name
+		episode=$(printf "%03d" $episode)
 		{
-			curl -L -# "$video_url" -o "${anime_id}-${ep_choice}.mp4" &&
-				printf "\n${c_green}Downloaded episode: %s${c_reset}\n" "$ep_choice" ||
-				printf "\n${c_red}Download failed episode: %s${c_reset}\n" "$ep_choice"
+			curl -L -# -C - "$video_url" -G -e 'https://streamani.io/' \
+				-o "${anime_id}-${episode}.mp4" "$video_url" >/dev/null 2>&1 &&
+				printf "${c_green}Downloaded episode: %s${c_reset}\n" "$episode" ||
+				printf "${c_red}Download failed episode: %s${c_reset}\n" "$episode"
 		}
 	fi
+}
 
-	printf "\n${c_green}Currently playing %s episode ${c_cyan}%d/%d\n" "$selection_id" $ep_choice $last_ep_number
+############
+# Start Up #
+############
+
+# to clear the colors when exited using SIGINT
+trap "printf '$c_reset'" INT HUP
+
+dep_ch "$player_fn" "curl" "sed" "grep"
+
+# option parsing
+is_download=0
+quality=best
+scrape=query
+while getopts 'hdHq:' OPT; do
+	case $OPT in
+		h)
+			help_text
+			exit 0
+			;;
+		d)
+			is_download=1
+			;;
+		H)
+			scrape=history
+			;;
+		q)
+			quality=$OPTARG
+			;;
+	esac
+done
+shift $((OPTIND - 1))
+
+########
+# main #
+########
+
+case $scrape in
+	query)
+		get_search_query "$*"
+		search_results=$(search_anime "$query")
+		[ -z "$search_results" ] && die "No search results found"
+		anime_selection "$search_results"
+		episode_selection
+		;;
+	history)
+		search_results=$(sed -n -E 's/\t[0-9]*//p' "$logfile")
+		[ -z "$search_results" ] && die "History is empty"
+		anime_selection "$search_results"
+		ep_choice_start=$(sed -n -E "s/${selection_id}\t//p" "$logfile")
+		;;
+esac
+
+{ # checking input
+	[ "$ep_choice_start" -eq "$ep_choice_start" ] 2>/dev/null || die "Invalid number entered"
+	episodes=$ep_choice_start
+
+	if [ -n "$ep_choice_end" ]; then
+		[ "$ep_choice_end" -eq "$ep_choice_end" ] 2>/dev/null || die "Invalid number entered"
+		# create list of episodes to download/watch
+		episodes=$(seq $ep_choice_start $ep_choice_end)
+	fi
+}
+
+# add anime to history file
+grep -q -w "${selection_id}" "$logfile" ||
+	printf "%s\t%d\n" "$selection_id" $((episode+1)) >> "$logfile"
+
+for ep in $episodes
+do
+	open_episode "$selection_id" "$ep"
+done
+episode=${ep_choice_end:-$ep_choice_start}
+
+while :; do
+	printf "\n${c_green}Currently playing %s episode ${c_cyan}%d/%d\n" "$selection_id" $episode $last_ep_number
 	printf "$c_blue[${c_cyan}%s$c_blue] $c_yellow%s$c_reset\n" "n" "next episode"
 	printf "$c_blue[${c_cyan}%s$c_blue] $c_magenta%s$c_reset\n" "p" "previous episode"
+	printf "$c_blue[${c_cyan}%s$c_blue] $c_yellow%s$c_reset\n" "s" "select episode"
+	printf "$c_blue[${c_cyan}%s$c_blue] $c_magenta%s$c_reset\n" "r" "replay current episode"
 	printf "$c_blue[${c_cyan}%s$c_blue] $c_red%s$c_reset\n" "q" "exit"
 	printf "${c_blue}Enter choice:${c_green} "
 	read choice
 	printf "$c_reset"
 	case $choice in
 		n)
-			ep_choice=$((ep_choice+1))
+			episode=$((episode + 1))
 			;;
 		p)
-			ep_choice=$((ep_choice-1))
+			episode=$((episode - 1))
 			;;
+
+		s)	printf "${c_blue}Choose episode $c_cyan[1-%d]$c_reset:$c_green " $last_ep_number
+			read episode
+			printf "$c_reset"
+			[ "$episode" -eq "$episode" ] 2>/dev/null || die "Invalid number entered"
+			;;
+
+		r)
+			episode=$((episode))
+			;;
+
 		q)
 			break;;
+
 		*)
 			die "invalid choice"
 			;;
 	esac
+
+	open_episode "$selection_id" "$episode"
 done

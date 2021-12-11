@@ -1,0 +1,41 @@
+[Default Applications]
+text/x-shellscript=text.desktop;
+x-scheme-handler/magnet=torrent.desktop;
+application/x-bittorrent=torrent.desktop;
+x-scheme-handler/mailto=mail.desktop;
+text/plain=text.desktop
+application/postscript=pdf.desktop;
+application/pdf=pdf.desktop;
+image/png=img.desktop;
+image/jpeg=img.desktop;
+image/gif=img.desktop;
+application/rss+xml=rss.desktop
+video/x-matroska=video.desktop
+x-scheme-handler/lbry=lbry.desktop
+inode/directory=file.desktop
+x-scheme-handler/tg=userapp-Telegram Desktop-45EO50.desktop
+x-scheme-handler/http=userapp-LibreWolf-0P7C70.desktop
+x-scheme-handler/https=userapp-LibreWolf-0P7C70.desktop
+x-scheme-handler/chrome=userapp-LibreWolf-0P7C70.desktop
+text/html=userapp-LibreWolf-0P7C70.desktop
+application/x-extension-htm=userapp-LibreWolf-0P7C70.desktop
+application/x-extension-html=userapp-LibreWolf-0P7C70.desktop
+application/x-extension-shtml=userapp-LibreWolf-0P7C70.desktop
+application/xhtml+xml=userapp-LibreWolf-0P7C70.desktop
+application/x-extension-xhtml=userapp-LibreWolf-0P7C70.desktop
+application/x-extension-xht=userapp-LibreWolf-0P7C70.desktop
+text/x-c=text.desktop
+
+[Added Associations]
+x-scheme-handler/tg=userapp-Telegram Desktop-45EO50.desktop;
+x-scheme-handler/http=librewolf.desktop;userapp-LibreWolf-0P7C70.desktop;
+x-scheme-handler/https=librewolf.desktop;userapp-LibreWolf-0P7C70.desktop;
+x-scheme-handler/chrome=librewolf.desktop;userapp-LibreWolf-0P7C70.desktop;
+text/html=librewolf.desktop;userapp-LibreWolf-0P7C70.desktop;
+application/x-extension-htm=librewolf.desktop;userapp-LibreWolf-0P7C70.desktop;
+application/x-extension-html=librewolf.desktop;userapp-LibreWolf-0P7C70.desktop;
+application/x-extension-shtml=librewolf.desktop;userapp-LibreWolf-0P7C70.desktop;
+application/xhtml+xml=librewolf.desktop;userapp-LibreWolf-0P7C70.desktop;
+application/x-extension-xhtml=librewolf.desktop;userapp-LibreWolf-0P7C70.desktop;
+application/x-extension-xht=librewolf.desktop;userapp-LibreWolf-0P7C70.desktop;
+inode/directory=telegramdesktop.desktop;

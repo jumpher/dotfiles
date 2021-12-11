@@ -17,7 +17,7 @@ function main {
 	word="$1"
 	number=$2
 	check_cache_folder
-	cd ~/pronunciation.wavs/
+	cd ~/.pronunciation.wavs/
 	if [ -s "${word}-${number}.wav" ]; then
 		echo "Pronunciation exists locally!";
 	else
@@ -29,8 +29,8 @@ function main {
 }
 
 function check_cache_folder {
-	if [ ! -d ~/pronunciation.wavs ]; then
-		if [ -e ~/pronunciation.wavs ]; then
+	if [ ! -d ~/.pronunciation.wavs ]; then
+		if [ -e ~/.pronunciation.wavs ]; then
 			echo -e "\e[0;31m"
 			echo "The pronounce program requires ~/pronunciation.wavs as a cache folder."
 			echo "But that name is already used by a file!"
@@ -38,7 +38,7 @@ function check_cache_folder {
 			echo -e "\e[0m"
 			exit -1
 		fi
-		mkdir ~/pronunciation.wavs
+		mkdir ~/.pronunciation.wavs
 	fi
 }
 
@@ -102,4 +102,3 @@ elif [ "$2" = "w" ]; then
 else
 	main $1 $2
 fi
-

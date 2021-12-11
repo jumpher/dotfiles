@@ -1,0 +1,44 @@
+#!/bin/sh !
+
+# Dmenu Prompt for these newspapers
+
+# From Dailyepaper.in
+Newspapers="
+The Hindu	               https://dailyepaper.in/the-hindu-pdf-epaper-download-$(date +%d)-july-2021/
+Financial Express	https://dailyepaper.in/financial-express-newspaper/
+Times of India		https://dailyepaper.in/times-of-india-epaper-pdf-download-2020/
+Economic Times		https://dailyepaper.in/economic-times-newspaper-today/
+Telegraph	https://dailyepaper.in/telegraph-newspaper/
+Dainik Bhasker		https://dailyepaper.in/dainik-bhaskar-epaper/
+Rajasthan Patrika	https://dailyepaper.in/rajasthan-patrika-epaper/
+"
+
+
+#https://dailyepaper.in/the-hindu-pdf-epaper-download-july-2021/
+# Sorting and prompting in Dmenu and copying to clipboard
+echo "$Newspapers" | grep -P "^$(echo "$Newspapers" | grep "https:" | sed 's/\t.*//g' | dmenu -i -p "Which One? (ESC to ignore)" -l 20 | awk '{print $1}')\s" | sed 's/.*\t//' | xclip -selection clipboard
+
+# Sorting to triming url of daily epaper site and then again copying to clipboard
+curl "$(xsel --clipboard)" | grep noopener | grep -Eo '(http|https)://[^?"]+' | xclip -selection clipboard
+
+# Sending Notification
+notify-send "🔽Downloading Newspaper🗞️"
+
+# Pasting clipboard for choosing date of Newspaper
+echo "$(xsel --clipboard)" > /tmp/down.txt
+
+# Choosing Newspaper 3rd from top on this site always latest newspaper
+head -n 3  /tmp/down.txt | tail -n 1  | xsel -i
+
+# Triming the downloading url of vk site again
+curl "$(xsel -o)" | grep iframe | grep -Eo '(http|https)://[^?"]+' > /tmp/axel.txt
+
+# Location of newspaper
+mkdir -p ~/Documents/News/
+
+# Formatting the paper and downloading finally
+while read url; do  aria2c -d ~/Documents/News/  $url; done < /tmp/axel.txt
+
+# Opening in zathura
+cd ~/Documents/News/
+zathura $( ls -Art | tail -n 1 )

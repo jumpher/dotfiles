@@ -1,0 +1,3 @@
+#!/bin/bash
+
+lz4jsoncat ~/.librewolf/mkj1tpqy.default-release/bookmarkbackups/bookmarks-2021-07-18_541_q6Fb3yb-EdyRuaqqQTOHFQ==.jsonlz4 | jq |grep uri | cut -d '"' -f4 | tail -n 60 >> ~/.bmks/urls &&  lz4jsoncat ~/.mozilla/firefox/8e9da84a.default-release/bookmarkbackups/bookmarks-2021-07-18_32_CDpNVObR2wq7hNPfsvdihw==.jsonlz4 | jq | grep uri | cut -d '"' -f4 >> ~/.bmks/urls && gawk -i inplace '!a[$0]++' ~/.bmks/urls
